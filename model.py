@@ -4,11 +4,15 @@ import torch.nn as nn
 from dataset import CustomDatasetFromCSV
 import numpy as np
 from torch.utils.data.sampler import SubsetRandomSampler
+from pytorch_lightning.metrics import Accuracy
+
 
 
 class CharCNN(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, learning_rate):
         super().__init__()
+        self.metric = Accuracy(num_classes=2)
+        self.learning_rate = learning_rate
         self.characters = "abcdefghijklmnopqrstuvwxyz0123456789-,;.!?:'\"/\\|_@#$%^&*~`+ =<>()[]{}"
         
         self.loss_function =  torch.nn.CrossEntropyLoss()
@@ -104,36 +108,59 @@ class CharCNN(pl.LightningModule):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_function(y_hat, y)
-        return dict(
-            loss=loss,
-            log=dict(
-                train_loss=loss
-            )
-        )
+        acc = self.metric(y_hat, y)
+        
+        return {
+            "loss":loss,
+            "acc":acc,
+            "log":{
+                "train_loss":loss,
+                "train_acc":acc
+            }
+        }
+        
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_function(y_hat, y)
-        return dict(
-            loss=loss,
-            log=dict(
-                val_loss=loss
-            )
-        )
+        acc = self.metric(y_hat, y)
+
+        return {
+            "loss":loss,
+            "acc":acc,
+            "log":{
+                "test_loss":loss,
+                "test_acc":acc
+            }
+        }
+
+    def training_epoch_end(self, outputs):
+        train_acc_mean = torch.stack([x['acc'] for x in outputs]).mean()
+        print("training_epoch_end",train_acc_mean)
+        return {'train_acc': train_acc_mean}
 
     def validation_step(self, batch, batch_nb):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_function(y_hat, y)
-        return dict(
-            loss=loss,
-            log=dict(
-                val_loss=loss
-            )
-        )
+        acc = self.metric(y_hat, y)
+        
+        return {
+            "loss":loss,
+            "acc":acc,
+            "log":{
+                "val_loss":loss,
+                "val_acc":acc
+            }
+        }
+
+    def validation_epoch_end(self, outputs):
+        val_acc_mean = torch.stack([x['acc'] for x in outputs]).mean()
+        print("validation_epoch_end: acc",val_acc_mean)
+        return {'val_acc': val_acc_mean}
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.9)
+        return torch.optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)
 
     def _configure_dataloaders(self,train=True):
         validation_split = .2

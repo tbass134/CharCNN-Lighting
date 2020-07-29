@@ -15,10 +15,11 @@ import numpy as np
 from model import CharCNN
 
 
+import shutil
+shutil.rmtree("lightning_logs")
 
 seed_everything(42)
 model = CharCNN()
-trainer = Trainer(gpus=1, deterministic=True, max_epochs=5, fast_dev_run=False)
+trainer = Trainer(gpus=1, deterministic=True, max_epochs=1, auto_lr_find= True, fast_dev_run=False)
 trainer.fit(model)
-# trainer.test(test_dataloaders=validation_loader, ckpt_path=None)
         
