@@ -22,7 +22,7 @@ def remove_urls(text):
     clean_text = re.sub(r'^https?:\/\/.*[\r\n]*', '', text, flags=re.MULTILINE)
     return clean_text
 
-pretrained_model = CharCNN.load_from_checkpoint("lightning_logs/version_9/checkpoints/epoch=44.ckpt")
+pretrained_model = CharCNN.loadpy_from_checkpoint("lightning_logs/version_0/checkpoints/epoch=977.ckpt")
 # print(pretrained_model)
 pretrained_model.freeze()
 

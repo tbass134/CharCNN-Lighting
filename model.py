@@ -1,18 +1,20 @@
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from dataset import CustomDatasetFromCSV
 import numpy as np
-from torch.utils.data.sampler import SubsetRandomSampler
 from pytorch_lightning.metrics import Accuracy
 
 
 
 class CharCNN(pl.LightningModule):
-    def __init__(self, learning_rate):
+    def __init__(self, train_ds=None, val_ds=None, learning_rate=0.001):
         super().__init__()
-        self.metric = Accuracy(num_classes=2)
         self.learning_rate = learning_rate
+        self.train_ds = train_ds
+        self.val_ds = val_ds
+
+        
+        self.metric = Accuracy(num_classes=2)
         self.characters = "abcdefghijklmnopqrstuvwxyz0123456789-,;.!?:'\"/\\|_@#$%^&*~`+ =<>()[]{}"
         
         self.loss_function =  torch.nn.CrossEntropyLoss()
@@ -136,7 +138,7 @@ class CharCNN(pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         train_acc_mean = torch.stack([x['acc'] for x in outputs]).mean()
-        print("training_epoch_end",train_acc_mean)
+        # print("training_epoch_end",train_acc_mean)
         return {'train_acc': train_acc_mean}
 
     def validation_step(self, batch, batch_nb):
@@ -156,41 +158,14 @@ class CharCNN(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         val_acc_mean = torch.stack([x['acc'] for x in outputs]).mean()
-        print("validation_epoch_end: acc",val_acc_mean)
+        # print("validation_epoch_end: acc",val_acc_mean)
         return {'val_acc': val_acc_mean}
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)
-
-    def _configure_dataloaders(self,train=True):
-        validation_split = .2
-        shuffle_dataset = True
-
-        dataset = CustomDatasetFromCSV("train.csv")
-
-        # Creating data indices for training and validation splits:
-        seed = 42
-        dataset_size = len(dataset)
-        indices = list(range(dataset_size))
-        split = int(np.floor(validation_split * dataset_size))
-
-        np.random.seed(seed)
-        np.random.shuffle(indices)
-        train_indices, val_indices = indices[split:], indices[:split]
-
-        # Creating PT data samplers and loaders:
-        train_sampler = SubsetRandomSampler(train_indices)
-        valid_sampler = SubsetRandomSampler(val_indices)
-
-        train_loader = torch.utils.data.DataLoader(dataset, sampler=train_sampler, batch_size=128, num_workers=4)
-        validation_loader = torch.utils.data.DataLoader(dataset,sampler=valid_sampler, num_workers=4)
-        if train:
-            return train_loader
-        else:
-            return validation_loader
+        return torch.optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)        
 
     def train_dataloader(self):
-        return self._configure_dataloaders(train=True)
+        return self.train_ds
 
     def val_dataloader(self):
-        return self._configure_dataloaders(train=False)
+        return self.val_ds
