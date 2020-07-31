@@ -2,9 +2,8 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import numpy as np
+import config
 from pytorch_lightning.metrics import Accuracy
-
-
 
 class CharCNN(pl.LightningModule):
     def __init__(self, train_ds=None, val_ds=None, learning_rate=0.001):
@@ -13,14 +12,13 @@ class CharCNN(pl.LightningModule):
         self.train_ds = train_ds
         self.val_ds = val_ds
 
-        
-        self.metric = Accuracy(num_classes=2)
+        self.metric = Accuracy()
         self.characters = "abcdefghijklmnopqrstuvwxyz0123456789-,;.!?:'\"/\\|_@#$%^&*~`+ =<>()[]{}"
         
         self.loss_function =  torch.nn.CrossEntropyLoss()
         self.dropout_input = nn.Dropout2d(0.1)
 
-        self.conv1 = nn.Sequential(nn.Conv1d(69 + 0,
+        self.conv1 = nn.Sequential(nn.Conv1d(config.number_of_characters,
                                              256,
                                              kernel_size=7,
                                              padding=0),
@@ -50,7 +48,7 @@ class CharCNN(pl.LightningModule):
                                    nn.MaxPool1d(3)
                                    )
 
-        input_shape = (128,150,69)
+        input_shape = (128,config.max_length,config.number_of_characters)
         self.output_dimension = self._get_conv_output(input_shape)
 
         # define linear layers
@@ -114,13 +112,26 @@ class CharCNN(pl.LightningModule):
         
         return {
             "loss":loss,
-            "acc":acc,
+            "train_acc":acc,
             "log":{
-                "train_loss":loss,
                 "train_acc":acc
             }
         }
         
+    def training_epoch_end(self, outputs):
+        train_acc_mean = 0
+        for output in outputs:
+            train_acc_mean += output['train_acc']
+
+        train_acc_mean /= len(outputs)
+
+        # log training accuracy at the end of an epoch
+        results = {
+            'log': {'train_acc_mean': train_acc_mean.item()},
+            'progress_bar': {'train_acc_mean': train_acc_mean},
+        }
+        return results
+
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
@@ -128,28 +139,37 @@ class CharCNN(pl.LightningModule):
         acc = self.metric(y_hat, y)
 
         return {
-            "loss":loss,
-            "acc":acc,
+            "test_loss":loss,
+            "test_acc":acc,
             "log":{
                 "test_loss":loss,
                 "test_acc":acc
             }
         }
 
-    def training_epoch_end(self, outputs):
-        train_acc_mean = torch.stack([x['acc'] for x in outputs]).mean()
-        # print("training_epoch_end",train_acc_mean)
-        return {'train_acc': train_acc_mean}
+    def test_epoch_end(self, outputs):
+        test_acc_mean = 0
+        for output in outputs:
+            test_acc_mean += output['test_acc']
 
+        test_acc_mean /= len(outputs)
+
+        # log training accuracy at the end of an epoch
+        results = {
+            'log': {'test_acc_mean': test_acc_mean.item()},
+            'progress_bar': {'test_acc_mean': test_acc_mean},
+        }
+        return results
+    
     def validation_step(self, batch, batch_nb):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_function(y_hat, y)
-        acc = self.metric(y_hat, y)
+        acc = self.metric(y, y_hat)
         
         return {
-            "loss":loss,
-            "acc":acc,
+            "val_loss":loss,
+            "val_acc":acc,
             "log":{
                 "val_loss":loss,
                 "val_acc":acc
@@ -157,9 +177,19 @@ class CharCNN(pl.LightningModule):
         }
 
     def validation_epoch_end(self, outputs):
-        val_acc_mean = torch.stack([x['acc'] for x in outputs]).mean()
-        # print("validation_epoch_end: acc",val_acc_mean)
-        return {'val_acc': val_acc_mean}
+        val_acc_mean = 0
+        for output in outputs:
+            val_acc_mean += output['val_acc']
+
+        val_acc_mean /= len(outputs)
+
+        # log training accuracy at the end of an epoch
+        results = {
+            'log': {'val_acc_mean': val_acc_mean.item()},
+            'progress_bar': {'val_acc_mean': val_acc_mean},
+        }
+        return results
+   
 
     def configure_optimizers(self):
         return torch.optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)        
